@@ -1,7 +1,5 @@
 package com.cn;
 
-import com.cn.LinkList.Node;
-
 public class Stack<E> {
 	/**栈长度**/
 	public int size = 0;
