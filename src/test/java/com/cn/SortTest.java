@@ -1,0 +1,42 @@
+package com.cn;
+
+import org.junit.Test;
+
+public class SortTest {
+	@Test
+	public void bubbleSortTest(){
+		Sort s = new Sort();
+		int[] array = {2,5,1,6,2,-1,46,21,42};
+		s.bubbleSort(array);
+		System.out.print("冒泡排序： ");
+		s.display(array);
+	}
+	
+	@Test
+	public void selectSortTest(){
+		Sort s = new Sort();
+		int[] array = {2,5,1,6,2,-1,46,21,42};
+		s.selectSort(array);
+		System.out.print("选择排序： ");
+		s.display(array);
+	}
+	
+	@Test
+	public void insertSortTest(){
+		Sort s = new Sort();
+		int[] array = {2,5,1,6,2,-1,46,21,42};
+		s.insertSort(array);
+		System.out.print("插入排序： ");
+		s.display(array);
+	}
+	
+	@Test
+	public void shellSortTest(){
+		Sort s = new Sort();
+		int[] array = {2,5,1,6,2,-1,46,21,42};
+		s.shellSort(array);
+		System.out.print("希尔排序： ");
+		s.display(array);
+	}
+
+}
