@@ -60,7 +60,7 @@ public class BinaryTree<E> {
 	StringBuffer sb = new StringBuffer();
 	/**
 	 * 前序遍历输出数组
-	 * @return
+	 * @return E[]
 	 */
 	public E[] preorderTraversal(Node<E> node){
 		sb = sb.delete(0, sb.length());
@@ -83,7 +83,7 @@ public class BinaryTree<E> {
 	
 	/**
 	 * 中序遍历输出数组
-	 * @return
+	 * @return E[]
 	 */
 	public E[] inorderTraversal(Node<E> node){
 		sb = sb.delete(0, sb.length());
@@ -105,7 +105,7 @@ public class BinaryTree<E> {
 	}
 	/**
 	 * 后序遍历输出数组
-	 * @return
+	 * @return E[]
 	 */
 	public E[] postorderTraversal(Node<E> node){
 		sb = sb.delete(0, sb.length());
