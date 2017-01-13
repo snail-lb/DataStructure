@@ -102,4 +102,15 @@ public class Queue<E> {
 			System.out.println(str);
 		}
 	}
+	
+	/**
+	 * 判断此队列是否为空
+	 * @return
+	 */
+	public boolean empty(){
+		if(this.head == null || this.tail == null || this.size == 0){
+			return true;
+		}
+		return false;
+	}
 }

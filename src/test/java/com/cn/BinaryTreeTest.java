@@ -7,8 +7,8 @@ import org.junit.Test;
 public class BinaryTreeTest {
 	@Test
 	public void testPreorderTraversal(){
-//		String[] strArray= {"A", "B", "C", "D", "E", "F", "G", "H", "I", "J"};
-		String[] strArray= {"0", "1", "2", "3", "4", "5", "6", "7", "8", "9"};
+		String[] strArray= {"A", "B", "C", "D", "E", "F", "G", "H", "I", "J"};
+//		String[] strArray= {"0", "1", "2", "3", "4", "5", "6", "7", "8", "9"};
 		BinaryTree<String> bt = new BinaryTree<String>(strArray);
 		
 		String [] pre = bt.preorderTraversal(bt.rootNode);
@@ -19,5 +19,30 @@ public class BinaryTreeTest {
 		
 		String [] post = bt.postorderTraversal(bt.rootNode);
 		System.out.println("后序遍历：" + Arrays.toString(post));
+		
+		Object[] depth =  bt.depthTraversing(bt.rootNode);
+		System.out.println("深度优先遍历：" + Arrays.toString(depth));
+		
+		Object[] layer =  bt.layerTraversing(bt.rootNode);
+		System.out.println("分层遍历：" + Arrays.toString(layer));
+		
+		System.out.println("二叉树节点数：" + bt.getNodeNumber(bt.rootNode));
+		
+		System.out.println("二叉树深度：" + bt.getDepth(bt.rootNode));
+		
+		System.out.println("第k层节点数：" + bt.getNodeNumberInLay(bt.rootNode, 4));
+		
+		System.out.println("叶子节点数：" + bt.getNodeNumberLeaf(bt.rootNode));
+		
+		System.out.println("判断两个树结构是否相同：" + bt.isStructureCmp(bt.rootNode,bt.rootNode) + 
+				"  " + bt.isStructureCmp(bt.rootNode,bt.rootNode.left));
+		
+		System.out.println("判断二叉树是否是平衡二叉树：" + bt.isAVL(bt.rootNode) + 
+				"  " + bt.isAVL(bt.rootNode.left));
+		
+		bt.rootNode.right.right = null;
+		
+		System.out.println("判断二叉树是否是完全二叉树：" + bt.isCompleteBinaryTree(bt.rootNode) + 
+				"  " + bt.isCompleteBinaryTree(bt.rootNode.left));
 	}
 }
