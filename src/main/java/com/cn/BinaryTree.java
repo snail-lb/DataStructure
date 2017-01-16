@@ -15,7 +15,7 @@ public class BinaryTree<E> {
 		E date;
 		/** 左子树 **/
 		Node<E> left;
-		/** 左子树 **/
+		/** 右子树 **/
 		Node<E> right;
 
 		Node(E date) {
@@ -142,6 +142,33 @@ public class BinaryTree<E> {
 			inorderTraversalRealize(node.right,list);
 		}
 	}
+	
+	/**
+	 * 中序遍历输出，非递归实现
+	 * @return
+	 */
+	public E[] inorderTraversalNoRecursion(Node<E> node){
+		if(node == null)
+			return null;
+		@SuppressWarnings("unchecked")
+		E[] e = (E[])Array.newInstance(node.date.getClass(), 0);//使用泛型数组进行记录
+		Stack<Node<E>> stack = new Stack<Node<E>>();
+		List<E> list = new ArrayList<E>();
+		while(node != null || !stack.empty()){
+			//存在左子树时
+			while(node != null){
+				stack.push(node);
+				node = node.left;
+			}
+			//栈非空时
+			if(!stack.empty()){
+				node = stack.pop();
+				list.add(node.date);
+				node = node.right;
+			}
+		}
+		return list.toArray(e);
+	}
 
 	/**
 	 * 后序遍历输出数组
@@ -168,6 +195,42 @@ public class BinaryTree<E> {
 			list.add(node.date);
 		}
 	}
+	
+	/**
+	 * 后续遍历（非递归输出）
+	 * @param node
+	 * @return
+	 */
+	public E[] postorderTraversalNoRecursion(Node<E> node){
+		if(node == null)
+			return null;
+		@SuppressWarnings("unchecked")
+		E[] e = (E[])Array.newInstance(node.date.getClass(), 0);//使用泛型数组进行记录
+		Stack<Node<E>> stack = new Stack<Node<E>>();
+		List<E> list = new ArrayList<E>();
+		Node<E> prv = node; //记录之前遍历的右结点  
+		while(node != null || !stack.empty()){
+			//存在左子树时
+			while(node != null){
+				stack.push(node);
+				node = node.left;
+			}
+			//栈非空时
+			if(!stack.empty()){
+				Node<E> nodeRight = stack.peek().right;
+				/*如果右结点为空，或者右结点之前遍历过，获取根结点数据*/  
+				if(nodeRight == null || nodeRight == prv ){
+					node = stack.pop();
+					list.add(node.date);
+					prv = node;
+					node = null;
+				}else{
+					node = nodeRight;
+				}
+			}
+		}
+		return list.toArray(e);
+	}
 
 	/**
 	 * 广度优先搜索(分层遍历二叉树): 使用队列实现。队列初始化，将根节点压入队列。当队列不为空，
@@ -183,7 +246,11 @@ public class BinaryTree<E> {
 		E[] e = (E[])Array.newInstance(node.date.getClass(), 0);//使用泛型数组进行记录
 		return list.toArray(e);
 	}
-
+	/**
+	 * 分层遍历辅助函数
+	 * @param node
+	 * @param list
+	 */
 	private void layerTraversingRealize(Node<E> node, List<E> list) {
 		Queue<Node<E>> queue = new Queue<Node<E>>();
 		queue.add(node);
@@ -216,8 +283,8 @@ public class BinaryTree<E> {
 	private void depthTraversingRealize(Node<E> node, List<E> list) {
 		if (node != null) {
 			list.add(node.date);
-			layerTraversingRealize(node.left, list);
-			layerTraversingRealize(node.right, list);
+			depthTraversingRealize(node.left, list);
+			depthTraversingRealize(node.right, list);
 		}
 	}
 

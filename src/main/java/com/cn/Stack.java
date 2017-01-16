@@ -54,7 +54,7 @@ public class Stack<E> {
 	
 	/**
 	 * 测试堆栈是否为空。
-	 * @return
+	 * @return 为空返回true，否则返回false
 	 */
 	public boolean empty(){
 		if(this.stackTop == null && this.size == 0){

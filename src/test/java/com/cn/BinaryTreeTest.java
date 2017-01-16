@@ -17,11 +17,17 @@ public class BinaryTreeTest {
 		String [] pre2 = bt.preorderTraversalNoRecursion(bt.rootNode);
 		System.out.println("前序遍历(非递归实现)：" + Arrays.toString(pre2));
 		
-		String [] in = bt.inorderTraversal(bt.rootNode);
-		System.out.println("中序遍历：" + Arrays.toString(in));
+		String [] in1 = bt.inorderTraversal(bt.rootNode);
+		System.out.println("中序遍历：" + Arrays.toString(in1));
 		
-		String [] post = bt.postorderTraversal(bt.rootNode);
-		System.out.println("后序遍历：" + Arrays.toString(post));
+		String [] in2 = bt.inorderTraversalNoRecursion(bt.rootNode);
+		System.out.println("中序遍历(非递归实现)：" + Arrays.toString(in2));
+		
+		String [] post1 = bt.postorderTraversal(bt.rootNode);
+		System.out.println("后序遍历：" + Arrays.toString(post1));
+		
+		String [] post2 = bt.postorderTraversalNoRecursion(bt.rootNode);
+		System.out.println("后序遍历(非递归实现)：" + Arrays.toString(post2));
 		
 		Object[] depth =  bt.depthTraversing(bt.rootNode);
 		System.out.println("深度优先遍历：" + Arrays.toString(depth));
