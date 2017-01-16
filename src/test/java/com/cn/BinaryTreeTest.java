@@ -11,8 +11,11 @@ public class BinaryTreeTest {
 //		String[] strArray= {"0", "1", "2", "3", "4", "5", "6", "7", "8", "9"};
 		BinaryTree<String> bt = new BinaryTree<String>(strArray);
 		
-		String [] pre = bt.preorderTraversal(bt.rootNode);
-		System.out.println("前序遍历：" + Arrays.toString(pre));
+		String [] pre1 = bt.preorderTraversal(bt.rootNode);
+		System.out.println("前序遍历：" + Arrays.toString(pre1));
+		
+		String [] pre2 = bt.preorderTraversalNoRecursion(bt.rootNode);
+		System.out.println("前序遍历(非递归实现)：" + Arrays.toString(pre2));
 		
 		String [] in = bt.inorderTraversal(bt.rootNode);
 		System.out.println("中序遍历：" + Arrays.toString(in));
@@ -44,5 +47,12 @@ public class BinaryTreeTest {
 		
 		System.out.println("判断二叉树是否是完全二叉树：" + bt.isCompleteBinaryTree(bt.rootNode) + 
 				"  " + bt.isCompleteBinaryTree(bt.rootNode.left));
+		
+		String[] mypre = {"A", "B", "D", "H", "I", "E", "J", "C", "F", "G"};
+		String[] myin = {"H", "D", "I", "B", "J", "E", "A", "F", "C", "G"};
+		BinaryTree<String> mybt = bt.reBuildBinaryTree(mypre, myin);
+		Object[] myobj =  mybt.layerTraversing(mybt.rootNode);
+		System.out.println("重建二叉树后进行的分层遍历：" + Arrays.toString(myobj));
+		
 	}
 }

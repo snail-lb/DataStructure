@@ -6,7 +6,7 @@ public class StackTest {
 	@Test
 	public void testPush(){
 		System.out.print("testPush: ");
-		Stack<String> stack = new Stack<>();
+		Stack<String> stack = new Stack<String>();
 		stack.push("张三");
 		stack.push("李四");
 		stack.push("王五");
@@ -14,7 +14,7 @@ public class StackTest {
 	}
 	
 	public Stack<String> newStack(){
-		Stack<String> stack = new Stack<>();
+		Stack<String> stack = new Stack<String>();
 		stack.push("张三");
 		stack.push("李四");
 		stack.push("王五");
