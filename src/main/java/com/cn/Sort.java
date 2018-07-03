@@ -29,6 +29,8 @@ public class Sort {
 	
 	/**
 	 * 冒泡排序
+	 * 两两比较相邻记录的关键字，如果反序则交换，直到没有反序的记录为止。
+	 * 时间复杂度: 最好：O(n²) 最坏：O(n²) 平均：O(n²)
 	 * @param array
 	 */
 	public void bubbleSort(int[] array){
@@ -43,6 +45,8 @@ public class Sort {
 	
 	/**
 	 * 选择排序
+	 * 简单选择排序法（Simple Selection Sort）就是通过n-i次关键字间的比较，从n-i+1个记录中选出关键字最小的记录，并和第i(1≤i≤n)个记录交换之。
+	 * 时间复杂度: 最好：O(n²) 最坏：O(n²) 平均：O(n²)
 	 * @param array
 	 */
 	public void selectSort(int[] array){
@@ -62,6 +66,8 @@ public class Sort {
 	
 	/**
 	 * 插入排序
+	 * 直接插入排序（Straight Insertion Sort）的基本操作是将一个记录插入到已经排好序的有序表中，从而得到一个新的、记录数增1的有序表。
+	 * 时间复杂度: 最好：O(n) 最坏：O(n²) 平均：O(n²)
 	 * @param array
 	 */
 	public void insertSort(int[] array){
@@ -81,6 +87,9 @@ public class Sort {
 	
 	/**
 	 * 希尔排序
+	 * 我们将原本有大量记录数的记录进行分组。分割成若干个子序列，此时每个子序列待排序的记录个数就比较少了，然后在这些子序列内分别进行直接插入排序，
+	 * 当整个序列都基本有序时，注意只是基本有序时，再对全体记录进行一次直接插入排序。
+	 * 时间复杂度: 最好：  最坏：  平均： O(n^1.25)
 	 * @param array
 	 */
 	public void shellSort(int[] array){
@@ -105,6 +114,10 @@ public class Sort {
 	
 	/**
 	 * 推排序
+	 * 堆排序（Heap Sort）就是利用堆（假设利用大顶堆）进行排序的方法。它的基本思想是，将待排序的序列构造成一个大顶堆。
+	 * 此时，整个序列的最大值就是堆顶的根结点。将它与堆数组的末尾元素进行交换，此时末尾元素就是最大值，然后将剩余的n-1个序列重新构造成一个堆，
+	 * 这样就会得到n个元素中的次小值。如此反复执行，便能得到一个有序序列了。（大顶堆：在完全二叉树中，每个结点的值都大于或等于其左右孩子结点的值）
+	 * 时间复杂度: 最好：O(nLog2n) 最坏：O(nLog2n) 平均：O(nLog2n)
 	 * @param array
 	 */
 	public void headSort(int[] array){
@@ -152,6 +165,10 @@ public class Sort {
 	
 	/**
 	 * 归并排序
+	 * 归并排序（Merging Sort）就是利用归并的思想实现的排序方法。它的原理是假设初始序列含有n个记录，则可以看成是n个有序的子序列，
+	 * 每个子序列的长度为1，然后两两归 并，得到⌈n/2⌉（⌈x⌉表示不小于x的最小整数）个长度为2的有序子序列；再两两归并，…… 如此重复，
+	 * 直至得到一个长度为n的有序序列为止，这 种排序方法称为2路归并排序。
+	 * 时间复杂度: 最好：O(nlogn) 最坏：O(nlogn) 平均：O(nlogn)
 	 * @param array
 	 */
 	public void mergeSort(int[] array){
@@ -200,6 +217,9 @@ public class Sort {
     
     /**
      * 快速排序
+	 * 快速排序（Quick Sort）的基本思想是通过一趟排序将待排记录分割成独立的两部分，其中一部分记录的关键字均比另一部分记录的关键字小，
+	 * 则可分别对这两部分记录继续进行排序，以达到整个序列有序的目的。
+	 * 时间复杂度: 最好：O(nlogn) 最坏：O(n²) 平均：O(nlogn)
      * @param array
      */
     public void quickSort(int[] array){
