@@ -1,4 +1,4 @@
-package com.cn;
+package com.cn.datastructure;
 
 public class Stack<E> {
 	/**栈长度**/

@@ -1,4 +1,4 @@
-package com.cn;
+package com.cn.datastructure;
 
 import java.lang.reflect.Array;
 import java.util.ArrayList;

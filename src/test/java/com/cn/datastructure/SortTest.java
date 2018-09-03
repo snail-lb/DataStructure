@@ -1,6 +1,8 @@
-package com.cn;
+package com.cn.datastructure;
 
 import org.junit.Test;
+
+import com.cn.datastructure.Sort;
 
 public class SortTest {
 	@Test

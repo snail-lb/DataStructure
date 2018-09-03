@@ -1,8 +1,10 @@
-package com.cn;
+package com.cn.datastructure;
 
 import java.util.Arrays;
 
 import org.junit.Test;
+
+import com.cn.datastructure.BinaryTree;
 
 public class BinaryTreeTest {
 	@Test

@@ -1,4 +1,6 @@
-package com.cn;
+package com.cn.datastructure;
+
+import com.cn.datastructure.OrderedListFind;
 
 public class OrderedListFindTest {
 	public static void main(String[] args) {
