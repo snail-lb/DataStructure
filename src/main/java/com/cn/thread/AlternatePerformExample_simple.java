@@ -7,10 +7,10 @@ import java.util.concurrent.TimeUnit;
 /**
  * @autor: lvbiao
  * @version: 1.0
- * @descript: 多个线程交替打印1,2,3,4.....
+ * @descript: 多个线程交替打印1,2,3,4.....  不使用锁实现
  * @date: 2018-09-09 12:39
  */
-public class AlternateExecutionExample {
+public class AlternatePerformExample_simple {
     public static void main(String[] args) {
         Integer threadNum = 5;
 
