@@ -3,14 +3,18 @@ package com.cn.thread;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
-public class ProducerCustomerExample_1 {
+public class ProducerCustomerExample_await {
     public static void main(String[] args){
         Goods goods = new Goods();
-
         ExecutorService executor = Executors.newFixedThreadPool(2);
-        executor.execute(new Producer(goods));
-        executor.execute(new Customer(goods));
+        Lock lock = new ReentrantLock();
+        Condition condition = lock.newCondition();
+        executor.execute(new Producer(goods, lock, condition));
+        executor.execute(new Customer(goods, lock, condition));
         executor.shutdown();
     }
 
@@ -18,19 +22,26 @@ public class ProducerCustomerExample_1 {
 
         private Goods goods = null;
 
-        public Producer(Goods goods){
+        private final Lock lock;
+
+        private final Condition condition;
+
+        public Producer(Goods goods, Lock lock, Condition condition){
             this.goods = goods;
+            this.lock = lock;
+            this.condition = condition;
         }
 
         @Override
         public void run() {
             while (true){
-                synchronized (goods){
+                lock.lock();
+                try {
                     //使用循环进行等待，相当于一个简单的自旋锁，防止虚假唤醒
                     while (goods.getTotal() > 5){
                         try {
                             System.out.println("商品数已达上限，等待消费");
-                            goods.wait();
+                            condition.await();
                         } catch (InterruptedException e) {
                             e.printStackTrace();
                         }
@@ -38,7 +49,11 @@ public class ProducerCustomerExample_1 {
 
                     goods.add();
                     //notify和notifyAll在这里都可以使用，因为一共只有两个线程
-                    goods.notifyAll();
+                    condition.signalAll();
+                } catch (Exception e) {
+                    e.printStackTrace();
+                } finally {
+                    lock.unlock();
                 }
 
                 try {
@@ -54,25 +69,36 @@ public class ProducerCustomerExample_1 {
 
         private Goods goods = null;
 
-        public Customer(Goods goods){
+        private final Lock lock;
+
+        private final Condition condition;
+
+        public Customer(Goods goods, Lock lock, Condition condition){
             this.goods = goods;
+            this.lock = lock;
+            this.condition = condition;
         }
 
         @Override
         public void run() {
             while (true){
-                synchronized (goods){
+                lock.lock();
+                try {
                     while (goods.getTotal() < 4){
                         try {
                             System.out.println("商品已经快卖完，等待生产");
-                            goods.wait();
+                            condition.await();
                         } catch (InterruptedException e) {
                             e.printStackTrace();
                         }
                     }
 
                     goods.del();
-                    goods.notifyAll();
+                    condition.signalAll();
+                } catch (Exception e) {
+                    e.printStackTrace();
+                } finally {
+                    lock.unlock();
                 }
 
                 try {
