@@ -34,11 +34,11 @@ public class DeadLockExample_lock {
         public void run() {
             try {
                 lock1.lock();
-                System.out.println("线程1获取到Obj1的锁了");
+                System.out.println("线程1获取到lock1的锁了");
                 //等待一秒让另一个线程能获取到第一个锁
                 TimeUnit.SECONDS.sleep(3L);
                 lock2.lock();
-                System.out.println("线程1获取到Obj2的锁了");
+                System.out.println("线程1获取到lock2的锁了");
             } catch (Exception e) {
                 e.printStackTrace();
             } finally {
@@ -65,10 +65,10 @@ public class DeadLockExample_lock {
         public void run() {
             try {
                 lock2.lock();
-                System.out.println("线程2获取到Obj2的锁了");
+                System.out.println("线程2获取到lock2的锁了");
                 TimeUnit.SECONDS.sleep(3L);
                 lock1.lock();
-                System.out.println("线程2获取到Obj1的锁了");
+                System.out.println("线程2获取到lock1的锁了");
             } catch (Exception e) {
                 e.printStackTrace();
             } finally {
