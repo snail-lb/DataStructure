@@ -10,7 +10,7 @@ import java.util.concurrent.TimeUnit;
  * @descript: 死锁样例  相互等待对方的资源
  * @date: 2018-09-12 22:20
  */
-public class DeadLockExample {
+public class DeadLockExample_sync {
     public static void main(String[] args){
         Object obj1 = new Object();
         Object obj2 = new Object();
@@ -21,8 +21,8 @@ public class DeadLockExample {
     }
 
     static class ExeThread_1 implements Runnable{
-        final Object obj1;
-        final Object obj2;
+        private final Object obj1;
+        private final Object obj2;
 
         public ExeThread_1(Object obj1, Object obj2) {
             this.obj1 = obj1;
@@ -48,8 +48,8 @@ public class DeadLockExample {
     }
 
     static class ExeThread_2 implements Runnable{
-        final Object obj1;
-        final Object obj2;
+        private final Object obj1;
+        private final Object obj2;
 
         public ExeThread_2(Object obj1, Object obj2) {
             this.obj1 = obj1;
