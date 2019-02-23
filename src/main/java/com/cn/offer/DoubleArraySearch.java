@@ -35,7 +35,7 @@ public class DoubleArraySearch {
      * @return
      */
     public static boolean doubleArraySearch(int[][] array, int target) {
-        if (null == array || array.length == 0) {
+        if (null == array || array.length == 0 || array[0].length == 0) {
             return false;
         }
         int xLength = array.length;
@@ -92,6 +92,26 @@ public class DoubleArraySearch {
                 break;
             }
 
+        }
+        return false;
+    }
+
+    /**
+     * 网上更简单的写法，思路大概是差不多的
+     * @param array
+     * @param target
+     * @return
+     */
+    public static boolean doubleArraySearchSimple(int[][] array, int target) {
+        int row=0;
+        int col=array[0].length-1;
+        while(row<=array.length-1&&col>=0){
+            if(target==array[row][col])
+                return true;
+            else if(target>array[row][col])
+                row++;
+            else
+                col--;
         }
         return false;
     }
