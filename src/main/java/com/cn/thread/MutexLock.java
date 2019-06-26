@@ -12,14 +12,17 @@ import java.util.concurrent.locks.Lock;
  * @date: 2019-06-25 23:04
  */
 public class MutexLock implements Lock {
+
     // 静态内部类，自定义同步器
     private static class Sync extends AbstractQueuedSynchronizer {
+
         // 是否处于占用状态
         @Override
         protected boolean isHeldExclusively() {
             return getState() == 1;
-        } //当状态为0的时候获取锁
+        }
 
+        //当状态为0的时候获取锁
         @Override
         public boolean tryAcquire(int acquires) {
             if (compareAndSetState(0, 1)) {
@@ -27,8 +30,9 @@ public class MutexLock implements Lock {
                 return true;
             }
             return false;
-        } //释放锁，将状态设置为0
+        }
 
+        //释放锁，将状态设置为0
         @Override
         protected boolean tryRelease(int releases) {
             if (getState() == 0) {
@@ -37,8 +41,9 @@ public class MutexLock implements Lock {
             setExclusiveOwnerThread(null);
             setState(0);
             return true;
-        } //返回一个Condition，每个condition都包含了一个condition队列
+        }
 
+        //返回一个Condition，每个condition都包含了一个condition队列
         Condition newCondition() {
             return new ConditionObject();
         }
