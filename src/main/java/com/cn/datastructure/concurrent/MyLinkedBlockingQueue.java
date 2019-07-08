@@ -3,6 +3,7 @@ package com.cn.datastructure.concurrent;
 import java.util.AbstractQueue;
 import java.util.Collection;
 import java.util.Iterator;
+import java.util.NoSuchElementException;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -135,11 +136,69 @@ public class MyLinkedBlockingQueue<E> extends AbstractQueue<E> implements Blocki
         }
     }
 
-    @Override
-    public boolean remove(Object o) {
-        return false;
+    /**
+     * 获取到put和take的锁，这里最好独立出来，所有需要同时获取两个锁的位置都使用该方法
+     * 如果分开写，有可能没有按照都先获取一个锁，在获取另一个锁的顺序，这样容易形成死锁
+     * <p>
+     * 比如一个线程 是 put.lock;take.lock
+     * 另一个线程是  take.lock;put.lock
+     * 两个同时将入都先获取了第一个锁，然后获取第二个锁的时候就会形成死锁
+     */
+    private void fullyLock() {
+        putLock.lock();
+        takeLock.lock();
     }
 
+    /**
+     * 释放两个锁
+     * 释放顺序不能变
+     */
+    private void fullyUnLock() {
+        takeLock.unlock();
+        putLock.unlock();
+    }
+
+    /**
+     * --> trail --> p -->  移除p节点
+     *
+     * @param p
+     * @param trail
+     */
+    private void unLink(Node<E> p, Node<E> trail) {
+        p.item = null;
+        trail.next = p.next;
+        if (p == last) {
+            last = trail;
+        }
+        if (this.count.getAndDecrement() == this.capacity) {
+            this.signalNotFull();
+        }
+    }
+
+    @Override
+    public boolean remove(Object o) {
+        if (null == o || this.count.get() == 0) {
+            return false;
+        }
+
+        this.fullyLock();
+        try {
+            // 这里遍历整个队列，找有没有和o相等的对象
+            Node<E> trail = this.head;
+            Node<E> p = trail.next;
+            while (p != null) {
+                if (o.equals(p.item)) {
+                    this.unLink(p, trail);
+                    return true;
+                }
+                trail = p;
+                p = p.next;
+            }
+            return false;
+        } finally {
+            this.fullyUnLock();
+        }
+    }
 
     /**
      * 将指定元素插入到此队列的尾部（如果立即可行且不会超出此队列的容量），在成功时返回 true，如果此队列已满，则返回 false。
@@ -173,7 +232,7 @@ public class MyLinkedBlockingQueue<E> extends AbstractQueue<E> implements Blocki
         } finally {
             putLock.unlock();
             if (signalNotEmpty) {
-                this.signalNotFull();
+                this.signalNotEmpty();
             }
         }
     }
@@ -207,7 +266,7 @@ public class MyLinkedBlockingQueue<E> extends AbstractQueue<E> implements Blocki
         } finally {
             putLock.unlock();
             if (signalNotEmpty) {
-                this.signalNotFull();
+                this.signalNotEmpty();
             }
         }
     }
@@ -283,7 +342,6 @@ public class MyLinkedBlockingQueue<E> extends AbstractQueue<E> implements Blocki
         }
 
         final Lock tackLock = this.takeLock;
-
         tackLock.lock();
         try {
             Node<E> eNode = this.head.next;
@@ -360,9 +418,7 @@ public class MyLinkedBlockingQueue<E> extends AbstractQueue<E> implements Blocki
 
     @Override
     public Iterator<E> iterator() {
-
-
-        return null;
+        return new InnerIterator();
     }
 
     @Override
@@ -438,4 +494,89 @@ public class MyLinkedBlockingQueue<E> extends AbstractQueue<E> implements Blocki
             this.item = item;
         }
     }
+
+
+    private class InnerIterator implements Iterator<E> {
+        private Node<E> current;
+        private Node<E> lastRet;
+        private E currentElement;
+
+        InnerIterator() {
+            fullyLock();
+
+            try {
+                this.current = head.next;
+                if (this.current != null) {
+                    this.currentElement = this.current.item;
+                }
+            } finally {
+                fullyUnLock();
+            }
+
+        }
+
+        @Override
+        public boolean hasNext() {
+            return this.current != null;
+        }
+
+        private Node<E> nextNode(Node<E> node) {
+            while (true) {
+                Node nextNode = node.next;
+                if (nextNode == node) {
+                    return head.next;
+                }
+
+                if (nextNode == null || nextNode.item != null) {
+                    return nextNode;
+                }
+
+                node = nextNode;
+            }
+        }
+
+        @Override
+        public E next() {
+            fullyLock();
+            try {
+                if (this.current == null) {
+                    throw new NoSuchElementException();
+                }
+
+                E node = this.currentElement;
+                this.lastRet = this.current;
+                this.current = this.nextNode(this.current);
+                this.currentElement = this.current == null ? null : this.current.item;
+                return node;
+            } finally {
+                fullyUnLock();
+            }
+        }
+
+        @Override
+        public void remove() {
+            if (this.lastRet == null) {
+                throw new IllegalStateException();
+            }
+
+            fullyLock();
+
+            try {
+                Node ret = this.lastRet;
+                this.lastRet = null;
+                Node trail = head;
+
+                for (Node p = trail.next; p != null; p = p.next) {
+                    if (p == ret) {
+                        unLink(p, trail);
+                        break;
+                    }
+                    trail = p;
+                }
+            } finally {
+                fullyUnLock();
+            }
+        }
+    }
+
 }
