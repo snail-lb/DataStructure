@@ -52,7 +52,7 @@ public class MyLinkedBlockingQueue<E> extends AbstractQueue<E> implements Blocki
     private transient Node<E> last;
 
     public MyLinkedBlockingQueue() {
-        this.capacity = Integer.MAX_VALUE;
+        this(Integer.MAX_VALUE);
     }
 
     public MyLinkedBlockingQueue(int capacity) {
@@ -61,6 +61,8 @@ public class MyLinkedBlockingQueue<E> extends AbstractQueue<E> implements Blocki
         }
 
         this.capacity = capacity;
+        // 第一个节点永远都是空的
+        last = head = new Node<E>(null);
     }
 
     public MyLinkedBlockingQueue(Collection<? extends E> items) {
@@ -104,8 +106,8 @@ public class MyLinkedBlockingQueue<E> extends AbstractQueue<E> implements Blocki
         final Node<E> h = this.head;
         this.head = h.next;
         h.next = null; // 帮助GC,减少引用链搜索？？？
-        E item = h.item;
-        h.item = null;
+        E item = this.head.item;
+        this.head.item = null;
         return item;
     }
 
@@ -133,12 +135,6 @@ public class MyLinkedBlockingQueue<E> extends AbstractQueue<E> implements Blocki
         }
     }
 
-
-    @Override
-    public boolean removeAll(Collection<?> c) {
-        return false;
-    }
-
     @Override
     public boolean remove(Object o) {
         return false;
@@ -154,27 +150,151 @@ public class MyLinkedBlockingQueue<E> extends AbstractQueue<E> implements Blocki
      */
     @Override
     public boolean offer(E e) {
-        return false;
+        if (null == e) {
+            throw new NullPointerException();
+        }
+
+        if (this.count.get() == this.capacity) {
+            return false;
+        }
+
+        boolean signalNotEmpty = false;
+        final Lock putLock = this.putLock;
+        putLock.lock();
+        try {
+            if (this.count.get() == this.capacity) {
+                return false;
+            }
+
+            this.enqueue(new Node<>(e));
+            this.count.getAndIncrement();
+            signalNotEmpty = true;
+            return true;
+        } finally {
+            putLock.unlock();
+            if (signalNotEmpty) {
+                this.signalNotFull();
+            }
+        }
     }
 
     @Override
     public boolean offer(E e, long timeout, TimeUnit unit) throws InterruptedException {
-        return false;
+        if (null == e) {
+            throw new NullPointerException();
+        }
+
+        if (this.count.get() == this.capacity) {
+            return false;
+        }
+
+        boolean signalNotEmpty = false;
+        long nanos = unit.toNanos(timeout);
+        final Lock putLock = this.putLock;
+        putLock.lock();
+        try {
+            while (this.count.get() == this.capacity) {
+                if (nanos <= 0) {
+                    return false;
+                }
+                nanos = this.notFull.awaitNanos(nanos);
+            }
+
+            this.enqueue(new Node<>(e));
+            this.count.getAndIncrement();
+            signalNotEmpty = true;
+            return true;
+        } finally {
+            putLock.unlock();
+            if (signalNotEmpty) {
+                this.signalNotFull();
+            }
+        }
     }
 
     @Override
     public E poll() {
-        return null;
+        if (this.count.get() == 0) {
+            return null;
+        }
+
+        final Lock tackLock = this.takeLock;
+        boolean signalNotFull = false;
+
+        tackLock.lock();
+        try {
+            if (this.count.get() != 0) {
+                E e = this.dequeue();
+                this.count.getAndDecrement();
+                signalNotFull = true;
+                return e;
+            }
+            return null;
+        } finally {
+            tackLock.unlock();
+            if (signalNotFull) {
+                this.signalNotFull();
+            }
+        }
     }
 
     @Override
     public E poll(long timeout, TimeUnit unit) throws InterruptedException {
-        return null;
+        if (this.count.get() == 0) {
+            return null;
+        }
+
+        final Lock tackLock = this.takeLock;
+        boolean signalNotFull = false;
+        long nanos = unit.toNanos(timeout);
+
+        tackLock.lock();
+        try {
+            while (this.count.get() == 0) {
+                if (nanos <= 0) {
+                    return null;
+                }
+                nanos = this.notEmpty.awaitNanos(nanos);
+            }
+
+            if (this.count.get() != 0) {
+                E e = this.dequeue();
+                signalNotFull = true;
+                int c = this.count.getAndDecrement();
+                // 这个操作是必须的吗?  因为每添加一个元素都会进行通知，所以这里应该没必要进行通知了吧？
+//                if (c > 1) {
+//                    notEmpty.signal();
+//                }
+                return e;
+            }
+            return null;
+        } finally {
+            tackLock.unlock();
+            if (signalNotFull) {
+                this.signalNotFull();
+            }
+        }
     }
 
     @Override
     public E peek() {
-        return null;
+        if (this.count.get() == 0) {
+            return null;
+        }
+
+        final Lock tackLock = this.takeLock;
+
+        tackLock.lock();
+        try {
+            Node<E> eNode = this.head.next;
+            if (null == eNode) {
+                return null;
+            } else {
+                return eNode.item;
+            }
+        } finally {
+            tackLock.unlock();
+        }
     }
 
     /**
@@ -247,12 +367,12 @@ public class MyLinkedBlockingQueue<E> extends AbstractQueue<E> implements Blocki
 
     @Override
     public int drainTo(Collection<? super E> c) {
-        return 0;
+        return this.drainTo(c, Integer.MAX_VALUE);
     }
 
     /**
      * 删除指定数量元素，然后将c中元素添加到队列中
-     *
+     * 将指定数量的元素出队列，放到指定的Collection中
      *
      * @param c
      * @param maxElements
@@ -270,28 +390,39 @@ public class MyLinkedBlockingQueue<E> extends AbstractQueue<E> implements Blocki
             return 0;
         }
 
-        // TODO 这里只用take锁可能会有丢数据的情况
         final Lock takeLock = this.takeLock;
-
-        //找到需要移除的数据量
-        int n = Math.min(maxElements, this.count.get());
+        boolean signalNotFull = false;
 
         takeLock.lock();
-
         try {
             int i = 0;
-            while (i < n) {
-                //
-
-                ++i;
+            //找到需要移除的数据量
+            int n = Math.min(maxElements, this.count.get());
+            Node<E> h;
+            h = head;
+            try {
+                while (i < n) {
+                    Node<E> eNode = h.next;
+                    c.add(eNode.item);
+                    eNode.item = null;
+                    h.next = null;
+                    h = eNode;
+                    ++i;
+                }
+                return n;
+            } finally {
+                //这一步必须执行，否则会有问题
+                if (i > 0) {
+                    this.head = h;
+                    signalNotFull = (this.count.addAndGet(-i) == this.capacity);
+                }
             }
-
         } finally {
-
+            takeLock.unlock();
+            if (signalNotFull) {
+                this.signalNotFull();
+            }
         }
-
-
-        return 0;
     }
 
     /**
