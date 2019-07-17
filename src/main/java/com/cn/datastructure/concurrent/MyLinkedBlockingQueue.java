@@ -16,6 +16,16 @@ import java.util.concurrent.locks.ReentrantLock;
  * @version: 1.0
  * @descript: 自定义实现一个阻塞队列
  * @date: 2019-07-05 15:17
+ *
+ * 实现基本原理是使用通知模式实现的：
+ * 所谓通知模式，就是当生产者往满的队列里添加元素时会阻塞住生产者，
+ * 当消费者消费了一个队列中的元素后，会通知生产者当前队列可用。
+ *
+ * 基本实现就是使用两个锁 putLock 和takeLock,  putLock--->notFull  takeLock--->notEmpty
+ * put元素时如果队列已达最大，使用notFull.wait()进入循环阻塞，直到被唤醒，添加元素完成后调用notEmpty.notify()
+ * take元素同理
+ *
+ *
  */
 public class MyLinkedBlockingQueue<E> extends AbstractQueue<E> implements BlockingQueue<E>, java.io.Serializable {
 
