@@ -189,7 +189,7 @@ public class MyThreadPoolExecutor {
      * 如果已经关闭进行相应的关闭操作
      */
     private void tryTerminate() {
-        if (isRunning() || (state.get() == STOP && workQueue.size() > 0)) {
+        if (isRunning() || (state.get() == SHUTDOWN && workQueue.size() > 0)) {
             return;
         }
 
@@ -318,7 +318,7 @@ public class MyThreadPoolExecutor {
         final ReentrantLock mainLock = this.mainLock;
         mainLock.lock();
         try {
-            while (true) {
+            while (totalTask.get() > 0) {
                 if (state.get() == TERMINATED) {
                     return true;
                 }
@@ -326,6 +326,7 @@ public class MyThreadPoolExecutor {
                     return false;
                 nanos = termination.awaitNanos(nanos);
             }
+            return true;
         } finally {
             mainLock.unlock();
         }
@@ -400,6 +401,12 @@ public class MyThreadPoolExecutor {
             addWorker(command, true);
             return;
         }
+        //当一个核心线程都没有设置的时候，应该至少添加一个非核心线程
+        if (corePoolSize == 0 && workers.size() == 0){
+            addWorker(command, false);
+            return;
+        }
+
         if (!workQueue.offer(command)) {
             if (workers.size() < maximumPoolSize) {
                 addWorker(command, false);
@@ -459,11 +466,20 @@ public class MyThreadPoolExecutor {
     }
 
     /**
-     * 返回正在执行的任务的大概总数
+     * 返返回任务总数
      *
      * @return
      */
     public long getTaskCount() {
+        return totalTask.get();
+    }
+
+    /**
+     * 获取正在执行任务的工作器总数
+     *
+     * @return
+     */
+    public long getActiveWorkCount() {
         long taskCount = 0;
         for (Worker worker : workers) {
             if (worker.isLocked()) {
@@ -529,15 +545,23 @@ public class MyThreadPoolExecutor {
                     totalTask.decrementAndGet();
                     worker.completedTasks++;
                     worker.unLock();
+                    if(totalTask.get() == 0){
+                        mainLock.lock();
+                        try {
+                            termination.signalAll();
+                        } finally {
+                            mainLock.unlock();
+                        }
+                    }
                 }
             }
         } finally {
             // 释放当前工作器的线程
             workers.remove(worker);
+            tryTerminate();
             if (exceptionInterrupt && isRunning()) {
                 addWorker(null, core);
             }
-            tryTerminate();
         }
     }
 
@@ -606,12 +630,6 @@ public class MyThreadPoolExecutor {
 
         public boolean isCore() {
             return core;
-        }
-
-        public void close() {
-            if (thread != null && !thread.isInterrupted()) {
-                thread.interrupt();
-            }
         }
 
         public void startTask() {
