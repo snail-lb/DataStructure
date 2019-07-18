@@ -545,12 +545,17 @@ public class MyThreadPoolExecutor {
                     totalTask.decrementAndGet();
                     worker.completedTasks++;
                     worker.unLock();
+                    //检查任务是否全部完成，如果全部完成就进行通知
                     if(totalTask.get() == 0){
                         mainLock.lock();
                         try {
                             termination.signalAll();
                         } finally {
                             mainLock.unlock();
+                        }
+                        //检查线程池是否已被关闭，如果已被关闭且任务已全部完成，就跳出loop
+                        if (state.get() <= SHUTDOWN) {
+                            break;
                         }
                     }
                 }
