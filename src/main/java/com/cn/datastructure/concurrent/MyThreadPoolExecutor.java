@@ -12,6 +12,7 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.AbstractQueuedSynchronizer;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
@@ -55,6 +56,10 @@ public class MyThreadPoolExecutor {
      * 最大的线程数量
      */
     private volatile int maximumPoolSize;
+    /**
+     * 总共已完成了多少条任务
+     */
+    private AtomicLong completedTaskCount = new AtomicLong(0);
     /**
      * 非核心线程的存活时间
      */
@@ -422,11 +427,11 @@ public class MyThreadPoolExecutor {
      * @return
      */
     public long getCompletedTaskCount() {
-        long completedTaskCount = 0;
+        long count = completedTaskCount.get();
         for (Worker worker : workers) {
-            completedTaskCount += worker.completedTasks;
+            count += worker.completedTasks;
         }
-        return completedTaskCount;
+        return count;
     }
 
     /**
@@ -563,11 +568,20 @@ public class MyThreadPoolExecutor {
         } finally {
             // 释放当前工作器的线程
             workers.remove(worker);
+            completedTaskCount.addAndGet(worker.completedTasks);
+
             tryTerminate();
             if (exceptionInterrupt && isRunning()) {
                 addWorker(null, core);
             }
         }
+    }
+
+    /**
+     * 线程池没有被引用的时候进行清理工作
+     */
+    protected void finalize() {
+        shutdown();
     }
 
     /**
