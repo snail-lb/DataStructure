@@ -6,9 +6,12 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.RunnableFuture;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -17,6 +20,7 @@ import java.util.concurrent.locks.AbstractQueuedSynchronizer;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
+import com.cn.datastructure.concurrent.future.MyFutureTask;
 import com.cn.datastructure.utils.MyRejectedExecutionHandler;
 
 /**
@@ -419,6 +423,17 @@ public class MyThreadPoolExecutor {
                 reject(command);
             }
         }
+    }
+
+    /**
+     * 返回一个Future，对任务进行控制
+     * @param task
+     * @return
+     */
+    public <T> Future<T> submit(Callable<T> task){
+        RunnableFuture<T> future = new MyFutureTask<T>(task);
+        execute(future);
+        return future;
     }
 
     /**
