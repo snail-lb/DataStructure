@@ -15,6 +15,8 @@ import java.util.concurrent.locks.ReentrantLock;
  * @version: 1.0
  * @descript:
  * @date: 2019-07-19 16:09
+ * Future基本原理就是实现Runnable接口，保存一个需要执行callable对象，在run方法中执行Callable的call方法
+ * 通过锁等待通知方式完成结果的异步获取。
  */
 public class MyFutureTask<T> implements RunnableFuture {
 
@@ -76,7 +78,9 @@ public class MyFutureTask<T> implements RunnableFuture {
         //正在运行中，直接中断线程
         if(mayInterruptIfRunning) {
             if (runner != null && !runner.isInterrupted()) {
+                state.set(INTERRUPTING);
                 runner.interrupt();
+                state.set(INTERRUPTED);
                 return true;
             }
         }
