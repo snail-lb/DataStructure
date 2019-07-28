@@ -6,16 +6,21 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.RunnableFuture;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.AbstractQueuedSynchronizer;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
+import com.cn.datastructure.concurrent.future.MyFutureTask;
 import com.cn.datastructure.utils.MyRejectedExecutionHandler;
 
 /**
@@ -55,6 +60,10 @@ public class MyThreadPoolExecutor {
      * 最大的线程数量
      */
     private volatile int maximumPoolSize;
+    /**
+     * 总共已完成了多少条任务
+     */
+    private AtomicLong completedTaskCount = new AtomicLong(0);
     /**
      * 非核心线程的存活时间
      */
@@ -417,16 +426,27 @@ public class MyThreadPoolExecutor {
     }
 
     /**
+     * 返回一个Future，对任务进行控制
+     * @param task
+     * @return
+     */
+    public <T> Future<T> submit(Callable<T> task){
+        RunnableFuture<T> future = new MyFutureTask<T>(task);
+        execute(future);
+        return future;
+    }
+
+    /**
      * 返回完成执行的任务的大概总数
      *
      * @return
      */
     public long getCompletedTaskCount() {
-        long completedTaskCount = 0;
+        long count = completedTaskCount.get();
         for (Worker worker : workers) {
-            completedTaskCount += worker.completedTasks;
+            count += worker.completedTasks;
         }
-        return completedTaskCount;
+        return count;
     }
 
     /**
@@ -563,11 +583,20 @@ public class MyThreadPoolExecutor {
         } finally {
             // 释放当前工作器的线程
             workers.remove(worker);
+            completedTaskCount.addAndGet(worker.completedTasks);
+
             tryTerminate();
             if (exceptionInterrupt && isRunning()) {
                 addWorker(null, core);
             }
         }
+    }
+
+    /**
+     * 线程池没有被引用的时候进行清理工作
+     */
+    protected void finalize() {
+        shutdown();
     }
 
     /**
