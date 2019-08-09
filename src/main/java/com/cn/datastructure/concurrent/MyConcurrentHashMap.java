@@ -8,6 +8,8 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
 import java.util.Spliterator;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * 利用MyConcurrentHashMap实现一个线程安全的Map,内部核心同步原理参照ConcurrentHashMap源码
@@ -39,47 +41,81 @@ public class MyConcurrentHashMap<K, V> extends AbstractMap<K, V>
      * 默认的负载因子，就是如果map中元素个数超过了threshold，就进行扩容
      * 这个值如果比较大，那么给table扩容的可能性就会降低，但是每条node链上的元素就会较多，占用的内存就比较小，但是查询时间就会变长，
      * 这个值如果比较小，那扩容的可能性就会增大，占用内存会更大，node链上的元素就会少一些，查询时间会更短
-    */
+     */
     static final float DEFAULT_LOAD_FACTOR = 0.75f;
+    /*
+     * Encodings for Node hash fields. See above for explanation.
+     */
+    static final int MOVED = -1; // hash for forwarding nodes
+    //    static final int TREEBIN   = -2; // hash for roots of trees
+    //    static final int RESERVED  = -3; // hash for transient reservations
+    // TODO 这里暂时没太明白计算hash为什么需要和这个值进行计算
+    static final int HASH_BITS = 0x7fffffff; // usable bits of normal node hash
+    private static final sun.misc.Unsafe U;
+    private static final long ABASE;
+    private static final int ASHIFT;
+
+    /**
+     * The number of bits used for generation stamp in sizeCtl.
+     * Must be at least 6 for 32bit arrays.
+     */
+    private static int RESIZE_STAMP_BITS = 16;
+
+    /**
+     * 帮助扩容的最大线程数
+     * The maximum number of threads that can help resize.
+     * Must fit in 32 - RESIZE_STAMP_BITS bits.
+     */
+    private static final int MAX_RESIZERS = (1 << (32 - RESIZE_STAMP_BITS)) - 1;
+
+    /**
+     * 扩容时下一个需要分割的索引位置
+     * The next table index (plus one) to split while resizing.
+     */
+    private transient volatile AtomicInteger transferIndex = new AtomicInteger(-1);
+
+    static {
+        try {
+            U = sun.misc.Unsafe.getUnsafe();
+            Class<?> ak = Node[].class;
+            ABASE = U.arrayBaseOffset(ak);
+            int scale = U.arrayIndexScale(ak);
+            if ((scale & (scale - 1)) != 0) {
+                throw new Error("data type scale not a power of two");
+            }
+            ASHIFT = 31 - Integer.numberOfLeadingZeros(scale);
+        } catch (Exception e) {
+            throw new Error(e);
+        }
+    }
+
     /**
      * 节点数组,长度总是2的n次方
      */
-    transient Node<K, V>[] table;
+    transient volatile Node<K, V>[] table;
     /**
      * 扩容时的新数组，只有在扩容的时候才不为空
      */
-    transient Node<K, V>[] newTable;
+    transient volatile Node<K, V>[] newTable;
     transient Set<Entry<K, V>> entrySet;
-    /**
-     * 下一次需要扩容的临界值， table.length * DEFAULT_LOAD_FACTOR
-     */
-    int threshold;
     /**
      * 当前ConcurrentHashMap的基本大小，
      * 这里纪录的只是一个基本值，一个线程put完成之后会对该值进行CAS操作，如果CAS失败的话，该值纪录数会小于实际大小
      */
-    private transient volatile long baseCount = 0;
+    private transient AtomicLong baseCount = new AtomicLong(0);
     /**
      * 纪录当前ConcurrentHashMap的状态
-     *  sizeCtl<-1 表示当前正在有 -sizeCtl-1个线程正在进行扩容操作
-     *  sizeCtl==-1 表示当前正在进行初始化操作
-     *  sizeCtl=0  表示没有指定初始容量
-     *  sizeCtl>0  在初始化之前表示初始容量，在初始化之后表示需要扩容的阈值，
-     *  除初始阈值指定负载因子外，其他自动计算扩容时计算阈值的方式：table.size*2 - table.size/2
+     * sizeCtl<-1 表示当前正在有 -sizeCtl-1个线程正在进行扩容操作
+     * sizeCtl==-1 表示当前正在进行初始化操作
+     * sizeCtl=0  表示没有指定初始容量
+     * sizeCtl>0  在初始化之前表示初始容量，在初始化之后表示需要扩容的阈值，
+     * 除初始阈值指定负载因子外，其他自动计算扩容时计算阈值的方式：table.size*2 - table.size/2
      */
-    private transient volatile int sizeCtl;
-    /*
-     * Encodings for Node hash fields. See above for explanation.
-     */
-    static final int MOVED     = -1; // hash for forwarding nodes
-//    static final int TREEBIN   = -2; // hash for roots of trees
-//    static final int RESERVED  = -3; // hash for transient reservations
-//    static final int HASH_BITS = 0x7fffffff; // usable bits of normal node hash
+    private transient volatile AtomicInteger sizeCtl = new AtomicInteger(0);
 
-
-//    final float loadFactor = 0.75f;
+    //    final float loadFactor = 0.75f;
     public MyConcurrentHashMap() {
-        this.sizeCtl = DEFAULT_MIN_CAPACITY;
+        sizeCtl.set(DEFAULT_MIN_CAPACITY);
     }
 
     /**
@@ -92,7 +128,6 @@ public class MyConcurrentHashMap<K, V> extends AbstractMap<K, V>
     }
 
     /**
-     *
      * @param initialCapacity
      * @param loadFactor
      */
@@ -101,25 +136,14 @@ public class MyConcurrentHashMap<K, V> extends AbstractMap<K, V>
             throw new IllegalArgumentException();
         }
         //这里+1是向上取整
-        long size = (long)((long)initialCapacity/loadFactor + 1.0f);
+        long size = (long) ((long) initialCapacity / loadFactor + 1.0f);
         int cap = tableSizeFor(size);
-        this.sizeCtl = cap;
+        sizeCtl.set(cap);
     }
 
     public MyConcurrentHashMap(Map<? extends K, ? extends V> m) {
-        this.sizeCtl = DEFAULT_MIN_CAPACITY;
+        sizeCtl.set(DEFAULT_MIN_CAPACITY);
         putAll(m);
-    }
-
-    /**
-     * hash值计算
-     *
-     * @param key
-     * @return
-     */
-    static final int hash(Object key) {
-        int h;
-        return (key == null) ? 0 : (h = key.hashCode()) ^ (h >>> 16);
     }
 
     /**
@@ -139,6 +163,31 @@ public class MyConcurrentHashMap<K, V> extends AbstractMap<K, V>
             size = 1 << n;
         }
         return size > DEFAULT_MAX_CAPACITY ? DEFAULT_MAX_CAPACITY : size;
+    }
+
+    /**
+     * volatile获取某个位置的值
+     *
+     * @param tab
+     * @param i
+     * @param <K>
+     * @param <V>
+     * @return
+     */
+    static final <K, V> Node<K, V> tabAt(Node<K, V>[] tab, int i) {
+        return (Node<K, V>) U.getObjectVolatile(tab, byteOffset(i));
+    }
+
+    static final <K, V> boolean casTabAt(Node<K, V>[] tab, int i, Node<K, V> expect, Node<K, V> update) {
+        return U.compareAndSwapObject(tab, byteOffset(i), expect, update);
+    }
+
+    static final <K, V> void setTabAt(Node<K, V>[] tab, int i, Node<K, V> update) {
+        U.putObjectVolatile(tab, byteOffset(i), update);
+    }
+
+    static final long byteOffset(int i) {
+        return ((long) i << ASHIFT) + ABASE;
     }
 
     Node<K, V> newNode(int hash, K key, V value, Node<K, V> next) {
@@ -284,7 +333,7 @@ public class MyConcurrentHashMap<K, V> extends AbstractMap<K, V>
 
     @Override
     public V put(K key, V value) {
-        return putVal(hash(key), key, value, false);
+        return putVal(key, value, false);
     }
 
     @Override
@@ -309,6 +358,7 @@ public class MyConcurrentHashMap<K, V> extends AbstractMap<K, V>
 
     /**
      * 添加size个元素，调整table大小以试以适应一次性添加size个元素
+     *
      * @param size
      */
     private void tryPresize(int size) {
@@ -318,57 +368,149 @@ public class MyConcurrentHashMap<K, V> extends AbstractMap<K, V>
     /**
      * 添加一个值
      *
-     * @param hash
      * @param key
      * @param value
      * @param onlyIfAbsent 如果存在就不覆盖该值
      * @return
      */
-    final V putVal(int hash, K key, V value, boolean onlyIfAbsent) {
-        Node<K, V>[] tab = table;
-
-        if (null == tab || tab.length == 0) {
-            tab = resize();
+    final V putVal(K key, V value, boolean onlyIfAbsent) {
+        if (null == key) {
+            throw new NullPointerException();
         }
-
-        int length = tab.length;
-        Node<K, V> first = tab[(length - 1) & hash];
-        if (first == null) {
-            //创建节点
-            tab[(length - 1) & hash] = newNode(hash, key, value, null);
-        } else {
-            Node<K, V> e = null;
-            if (hash == first.hash && (first.key == key || (key != null && key.equals(first.key)))) {
-                //第一个节点的key就是需要添加的key
-                e = first;
-            } else if (null != first.next) {
-                Node<K, V> node = first;
-                while (null != node.next) {
-                    node = node.next;
-                    if (hash == node.hash && (node.key == key || (key != null && key.equals(node.key)))) {
-                        e = node;
-                        break;
+        int hash = spread(key.hashCode());
+        Node<K, V>[] tab;
+        for (tab = table; ; ) {
+            Node<K, V> first;//头结点
+            int i, n;
+            if (null == tab || (n = tab.length) == 0) {
+                //如果tabl为null，说明表还没有初始化，需要进行初始化工作
+                tab = initTable();
+            } else if ((first = tabAt(tab, i = (n - 1) & hash)) == null) {
+                // 如果头结点为空，那么就直接设置值，不需要加锁
+                if (casTabAt(tab, i, null, new Node<K, V>(hash, key, value, null))) {
+                    break;
+                }
+            } else if (sizeCtl.get() == MOVED) {
+                //说明正在扩容， 帮助扩容
+                tab = helpTransfer(tab, first);
+            } else {
+                V oldValue = null;
+                synchronized (first) {
+                    // 锁定头结点将值设置到链表中去,这里放到链表末尾
+                    Node<K, V> currentNode = first;
+                    while (currentNode.next != null) {
+                        K currKey = currentNode.key;
+                        if (hash == currentNode.hash && (key == currKey || (currKey != null && currKey.equals(key)))) {
+                            //说明设置的值已经存在了
+                            oldValue = currentNode.value;
+                            if (!onlyIfAbsent) {
+                                currentNode.value = value;
+                            }
+                            break;
+                        }
+                        if ((currentNode = currentNode.next) == null) {
+                            currentNode.next = new Node<>(hash, key, value, null);
+                            break;
+                        }
                     }
                 }
-                if (null == e) {
-                    node.next = newNode(hash, key, value, null);
+                // 这里oldValue不为空说明该key值已经存在过，只是一个修改操作，所以就直接返回了
+                if (oldValue != null) {
+                    return oldValue;
                 }
-            }
-
-            //这里如果为true，就说明之前这个key是存在的
-            if (null != e) {
-                V oldValue = e.value;
-                if (!onlyIfAbsent || null == e.value) {
-                    e.value = value;
-                }
-                return oldValue;
+                break;
             }
         }
-
-        if (++baseCount > threshold) {
-            resize();
-        }
+        addCount(1L, 1);
         return null;
+    }
+
+    /**
+     * 成功添加元素之后进行元素计数的累计操作，并检查是否需要进行扩容操作，如果需要就进行扩容
+     *
+     * @param x     添加元素个数
+     * @param check 检查是否进行扩容操作， if<0不检查，if>=0检查
+     */
+    private final void addCount(long x, int check) {
+        //这里添加x是一个原子操作，不会存在多个线程同时添加时，某个线程无法感知其他线程的累加操作
+        long size = baseCount.addAndGet(x);
+        if (check >= 0) {
+            int n, sc;
+            Node<K,V>[] tab, nt;
+            while((n = table.length) < DEFAULT_MAX_CAPACITY &&  //没有达到数组的最大长度才允许扩容
+                    (tab=table) != null && //保证初始化之后才进行扩容操作
+                    size >= (sc = sizeCtl.get())) { //达到扩容阈值
+                if(sc < 0) {
+                    //说明已经有线程在进行扩容了
+                    if ((nt = newTable) == null || //说明扩容主线程要么还没开始，要么已经结束了，没开始的概率非常小
+                            transferIndex.get() <= 0 || //已经扩容完毕了
+                            ((-sc - 1) >= MAX_RESIZERS)) {//帮助扩容的线程数已经达到最大值了
+                        break;
+                    }
+                    if (sizeCtl.compareAndSet(sc, sc-1)){
+                        //帮助扩容
+                        transfer(tab, nt);
+                    }
+                } else if(sizeCtl.compareAndSet(sc, -1)){
+                    //说明需要当前线程进行扩容操作
+                    transfer(tab, null);
+                }
+                size = baseCount.get();
+            }
+        }
+    }
+
+    /**
+     * 扩容操作
+     * @param tab
+     * @param nextTab 为null时表示需要当前线程创建newTable
+     */
+    private void transfer(Node<K,V>[] tab, Node<K,V>[] nextTab) {
+    }
+
+    private Node<K, V>[] helpTransfer(Node<K, V>[] tab, Node<K, V> first) {
+        return null;
+    }
+
+    /**
+     * 初始化数组
+     *
+     * @return
+     */
+    private Node<K, V>[] initTable() {
+        Node<K, V>[] tab;
+        int sc;
+        while ((tab = table) == null || tab.length == 0) {
+            if ((sc = sizeCtl.get()) < 0) {
+                //说明有其他线程已经在进行初始化了
+                Thread.yield();
+            } else if (sizeCtl.compareAndSet(sc, -1)) {
+                //cas方式将sizeCtl值设为-1，设置成功就可以认为当前线程获取到锁了，能够进行初始化工作了
+                try {
+                    if ((tab = table) == null || tab.length == 0) {
+                        int n = sc > 0 ? sc : DEFAULT_MIN_CAPACITY;
+                        Node<K, V>[] nt = (Node<K, V>[]) new Node<?, ?>[n];
+                        table = tab = nt;
+                        // 设置扩容阈值
+                        sc = n - (n >> 2);
+                    }
+                } finally {
+                    sizeCtl.set(sc);
+                }
+                break;
+            }
+        }
+        return tab;
+    }
+
+    /**
+     * 计算hash
+     *
+     * @param h
+     * @return
+     */
+    private int spread(int h) {
+        return (h ^ (h >>> 16)) & HASH_BITS;
     }
 
     static class Node<K, V> implements Entry<K, V> {
@@ -408,23 +550,26 @@ public class MyConcurrentHashMap<K, V> extends AbstractMap<K, V>
 
     /**
      * 转运节点，用于旧数组的槽点扩容完成之后占用槽点的节点类
+     *
      * @param <K>
      * @param <V>
      */
-    static final class ForwardingNode<K,V> extends Node<K,V> {
-        final Node<K,V>[] nextTable;
-        public ForwardingNode(Node<K,V>[] nextTable) {
+    static final class ForwardingNode<K, V> extends Node<K, V> {
+        final Node<K, V>[] nextTable;
+
+        public ForwardingNode(Node<K, V>[] nextTable) {
             super(MOVED, null, null, null);
             this.nextTable = nextTable;
         }
 
         /**
          * 从新数组中查找指定key值的节点
-         * @param n 新数组中的槽点位置
+         *
+         * @param n   新数组中的槽点位置
          * @param key 查找的key
          * @return
          */
-        Node<K, V> find(int n, Object key){
+        Node<K, V> find(int n, Object key) {
             return null;
         }
     }
@@ -443,7 +588,11 @@ public class MyConcurrentHashMap<K, V> extends AbstractMap<K, V>
 
         @Override
         public int size() {
-            return (int) baseCount;
+            long size = baseCount.get();
+            if (size > Integer.MAX_VALUE) {
+                size = Integer.MAX_VALUE;
+            }
+            return (int) size;
         }
 
     }
