@@ -56,10 +56,21 @@ public class MyConcurrentHashMap<K, V> extends AbstractMap<K, V>
     private static final int ASHIFT;
 
     /**
+     * 当前CPU数量，限制扩容线程数量
+     */
+    static final int NCPU = Runtime.getRuntime().availableProcessors();
+
+    /**
      * The number of bits used for generation stamp in sizeCtl.
      * Must be at least 6 for 32bit arrays.
      */
     private static int RESIZE_STAMP_BITS = 16;
+
+    /**
+     * The bit shift for recording size stamp in sizeCtl.
+     */
+    private static final int RESIZE_STAMP_SHIFT = 32 - RESIZE_STAMP_BITS;
+
 
     /**
      * 帮助扩容的最大线程数
@@ -67,6 +78,11 @@ public class MyConcurrentHashMap<K, V> extends AbstractMap<K, V>
      * Must fit in 32 - RESIZE_STAMP_BITS bits.
      */
     private static final int MAX_RESIZERS = (1 << (32 - RESIZE_STAMP_BITS)) - 1;
+
+    /**
+     * 扩容时每次任务迁移的最小的槽数
+     */
+    private static final int MIN_TRANSFER_STRIDE = 16;
 
     static {
         try {
@@ -277,9 +293,9 @@ public class MyConcurrentHashMap<K, V> extends AbstractMap<K, V>
                 // validated==true 表示已经run过核心的查找逻辑了，所以在内部就可以break
                 if (validated) {
                     if (oldValue != null) {
-                        if ( value == null) {
+                        if (value == null) {
                             //说明是remove操作
-                            addCount(-1L,  -1);
+                            addCount(-1L, -1);
                         }
                         return oldValue;
                     }
@@ -288,59 +304,6 @@ public class MyConcurrentHashMap<K, V> extends AbstractMap<K, V>
             }
         }
         return null;
-    }
-
-    /**
-     * 扩容
-     *
-     * @return
-     */
-    final Node<K, V>[] resize() {
-        Node<K, V>[] oldTab = table;
-        int oldCap = (oldTab == null) ? 0 : oldTab.length;
-        int oldThr = threshold;
-        int newCap, newThr = 0;
-        if (oldCap > 0) {
-            //如果容量已经达到最大了，就不能再扩容了
-            if (oldCap >= DEFAULT_MAX_CAPACITY) {
-                threshold = DEFAULT_MAX_CAPACITY;
-                return oldTab;
-            } else if ((newCap = oldCap << 1) < DEFAULT_MAX_CAPACITY && oldCap > DEFAULT_MIN_CAPACITY) {
-                //扩容2倍
-                newThr = oldThr << 1;
-            }
-        } else if (oldThr > 0) {
-            //跑到这里表明是初始化时指明了容器初始化大小的调用的，这里的容量有可能小于16
-            newCap = oldThr;
-        } else {
-            newCap = DEFAULT_MIN_CAPACITY;
-            //HashMap中这里使用的默认的负载因子，暂时未发现为什么这么指定，
-            // 如果使用默认负载因子，那么新建Map<>时指定的负载因子大小就不会生效，所以这里暂时先使用指定的大小
-            newThr = (int) (newCap * loadFactor);
-        }
-
-        //
-        if (newThr == 0) {
-            float ft = (float) newCap * loadFactor;
-            newThr = (newCap < DEFAULT_MAX_CAPACITY && ft < (float) DEFAULT_MAX_CAPACITY ?
-                    (int) ft : DEFAULT_MAX_CAPACITY);
-        }
-
-        //到这里扩容的大小就已经计算出来了
-        Node<K, V>[] newTab = new Node[newCap];
-        threshold = newThr;
-        table = newTab;
-        if (null != oldTab) {
-            //将老的数据重新整理放到新的Node节点中
-            for (int i = 0; i < oldCap; i++) {
-                Node<K, V> e = oldTab[i];
-                if (null != e) {
-                    oldTab[i] = null;
-                    newTab[e.hash & (newCap - 1)] = e;
-                }
-            }
-        }
-        return newTab;
     }
 
     @Override
@@ -401,6 +364,7 @@ public class MyConcurrentHashMap<K, V> extends AbstractMap<K, V>
      * @param key
      * @return
      */
+    @Override
     public boolean containsKey(Object key) {
         return get(key) != null;
     }
@@ -521,10 +485,78 @@ public class MyConcurrentHashMap<K, V> extends AbstractMap<K, V>
      * @param nextTab 为null时表示需要当前线程创建newTable
      */
     private void transfer(Node<K, V>[] tab, Node<K, V>[] nextTab) {
-        Node<K, V>[] newTab;
-        int sc;
+        int n = tab.length, stride;
+        if ((stride = (NCPU > 1) ? (n >>> 3) / NCPU : n) < MIN_TRANSFER_STRIDE) {
+            stride = MIN_TRANSFER_STRIDE; // 保证最少在16个槽以上
+        }
 
+        if (nextTab == null) {
+            //说明是扩容主线程，需要创建新的数组
+            try {
+                Node<K, V>[] nt = (Node<K, V>[]) new Node<?, ?>[n << 1];
+                nextTab = nt;
+            } catch (Throwable e) {
+                //防止内存溢出
+                sizeCtl.set(Integer.MAX_VALUE);
+                return;
+            }
+            newTable = nextTab;
+            transferIndex.set(n);
+        }
 
+        int nextn = nextTab.length;
+        ForwardingNode<K, V> fwd = new ForwardingNode<>(nextTab);
+        boolean advance = true;
+        boolean finishing = false;
+        for (int i = 0, bound = 0; ; ) {
+            Node<K, V> first;int fh;
+
+            //CAS方式获取本次扩容的坐标位置
+            while (advance) {
+                int nextIndex, nextBound;
+                if (--i >= bound || finishing) {
+                    advance = false;
+                } else if ((nextIndex = transferIndex.get()) <= 0) {
+                    i = -1;
+                    advance = false;
+                } else if (transferIndex.compareAndSet(nextIndex,
+                        nextBound = (nextIndex > stride ? nextIndex - stride : 0))) {
+                    bound = nextBound;
+                    i = nextIndex - 1;
+                    advance = false;
+                }
+            }
+
+            if (i < 0 || i >= n || i + n >= nextn) {
+                int sc;
+                if (finishing) {
+                    newTable = null;
+                    table = nextTab;
+                    sizeCtl.set((n << 1) - (n >>> 1));
+                    return;
+                }
+                if (sizeCtl.compareAndSet(sc = sizeCtl.get(), sc - 1)) {
+                    if((sc - 2) != resizeStamp(n) << RESIZE_STAMP_SHIFT) {
+                        return;
+                    }
+                    finishing = advance = true;
+                    i = n;
+                }
+            } else if((first = tabAt(tab, i)) == null) {
+                advance = casTabAt(tab, i, null, fwd);
+            } else if((fh = first.hash) == MOVED) {
+                advance = true;
+            } else {
+                synchronized (first){
+                    //TODO
+                }
+            }
+        }
+
+    }
+
+    private int resizeStamp(int n) {
+        return Integer.numberOfLeadingZeros(n) | (1 << (RESIZE_STAMP_BITS - 1));
     }
 
     private Node<K, V>[] helpTransfer(Node<K, V>[] tab, Node<K, V> first) {
@@ -615,8 +647,9 @@ public class MyConcurrentHashMap<K, V> extends AbstractMap<K, V>
                 do {
                     K ek;
                     if (e.hash == h &&
-                            ((ek = e.key) == k || (ek != null && k.equals(ek))))
+                            ((ek = e.key) == k || (ek != null && k.equals(ek)))) {
                         return e;
+                    }
                 } while ((e = e.next) != null);
             }
             return null;
@@ -644,6 +677,7 @@ public class MyConcurrentHashMap<K, V> extends AbstractMap<K, V>
          * @param key 查找的key
          * @return
          */
+        @Override
         Node<K, V> find(int n, Object key) {
             return null;
         }
@@ -688,7 +722,7 @@ public class MyConcurrentHashMap<K, V> extends AbstractMap<K, V>
             Node<K, V>[] tab = table;
             current = next = null;
             index = 0;
-            if (tab != null && baseCount > 0) {
+            if (tab != null && baseCount.get() > 0) {
                 while (index < tab.length && next == null) {
                     next = tab[index++];
                 }
@@ -721,7 +755,7 @@ public class MyConcurrentHashMap<K, V> extends AbstractMap<K, V>
 
             current = null;
             K key = p.key;
-            removeNode(hash(key), key, null, false);
+           replaceNode(key, null, null);
         }
     }
 
