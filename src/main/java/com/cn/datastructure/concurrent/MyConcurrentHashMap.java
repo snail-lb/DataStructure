@@ -68,12 +68,6 @@ public class MyConcurrentHashMap<K, V> extends AbstractMap<K, V>
      */
     private static final int MAX_RESIZERS = (1 << (32 - RESIZE_STAMP_BITS)) - 1;
 
-    /**
-     * 扩容时下一个需要分割的索引位置
-     * The next table index (plus one) to split while resizing.
-     */
-    private transient volatile AtomicInteger transferIndex = new AtomicInteger(-1);
-
     static {
         try {
             U = sun.misc.Unsafe.getUnsafe();
@@ -98,6 +92,11 @@ public class MyConcurrentHashMap<K, V> extends AbstractMap<K, V>
      */
     transient volatile Node<K, V>[] newTable;
     transient Set<Entry<K, V>> entrySet;
+    /**
+     * 扩容时下一个需要分割的索引位置
+     * The next table index (plus one) to split while resizing.
+     */
+    private transient volatile AtomicInteger transferIndex = new AtomicInteger(-1);
     /**
      * 当前ConcurrentHashMap的基本大小，
      * 这里纪录的只是一个基本值，一个线程put完成之后会对该值进行CAS操作，如果CAS失败的话，该值纪录数会小于实际大小
@@ -180,6 +179,7 @@ public class MyConcurrentHashMap<K, V> extends AbstractMap<K, V>
 
     /**
      * CAS方式设置数组中的某个值
+     *
      * @param tab
      * @param i
      * @param expect
@@ -194,6 +194,7 @@ public class MyConcurrentHashMap<K, V> extends AbstractMap<K, V>
 
     /**
      * 修改数组中的某个值
+     *
      * @param tab
      * @param i
      * @param update
@@ -206,6 +207,7 @@ public class MyConcurrentHashMap<K, V> extends AbstractMap<K, V>
 
     /**
      * 计算偏移量
+     *
      * @param i
      * @return
      */
@@ -218,47 +220,70 @@ public class MyConcurrentHashMap<K, V> extends AbstractMap<K, V>
     }
 
     /**
-     * 删除节点
+     * 公共的替换节点方法
+     * 如果cv不为空且与key值对应的value相匹配，就用value替换key的value
+     * 如果value为null，则删除key
      *
-     * @param hash
      * @param key
      * @param value
-     * @param matchValue true：值匹配的时候才移除
+     * @param cv
      * @return
      */
-    final Node<K, V> removeNode(int hash, Object key, Object value, boolean matchValue) {
-        Node<K, V>[] tab = table;
-        Node<K, V> lastNode = null;//上一个节点
-        Node<K, V> currentNode = null;//当前节点
-        if (null != tab && tab.length > 0) {
-            int firstLocal = hash & (tab.length - 1);
-            Node<K, V> first = tab[firstLocal];
-            if (first != null) {
-                if (hash == first.hash && (first.key == key || (key != null && key.equals(first.key)))) {
-                    //第一个节点就是
-                    currentNode = first;
-                } else if (null != first.next) {
-                    Node<K, V> node = first;
-                    while (null != node.next) {
-                        lastNode = node;
-                        node = node.next;
-                        if (hash == node.hash && (node.key == key || (key != null && key.equals(node.key)))) {
-                            currentNode = node;
-                            break;
+    final V replaceNode(Object key, V value, Object cv) {
+        int hash = spread(key.hashCode());
+        for (Node<K, V>[] tab = table; ; ) {
+            Node<K, V> first;
+            int n, i, fh;
+            if (tab == null || (n = tab.length) == 0 ||
+                    (first = tabAt(tab, i = (n - 1) & hash)) == null) {
+                // 说明还没有初始化或者该槽中还没有任何值
+                break;
+            } else if ((fh = first.hash) == MOVED) {
+                //说明正在扩容
+                tab = helpTransfer(tab, first);
+            } else {
+                V oldValue = null;
+                boolean validated = false;
+                synchronized (first) {
+                    //扩容之后，first有可能就不再试first了，所以这里需要再次验证下
+                    if (tabAt(tab, i) == first) {
+                        validated = true;
+                        Node<K, V> e = first, pred = null;
+                        while ((e = e.next) != null) {
+                            K ek;
+                            if (e.hash == hash &&
+                                    ((ek = e.key) == key || (ek != null && key.equals(ek)))) {
+                                V ev = e.value;
+                                if (cv == null || cv == ev || (ev != null && cv.equals(ev))) {
+                                    oldValue = ev;
+                                    if (value != null) {
+                                        //替换值
+                                        e.value = value;
+                                    } else if (pred != null) {
+                                        //匹配到的节点不是第一个节点
+                                        pred.next = e.next;
+                                    } else {
+                                        //匹配到的节点是第一个节点
+                                        setTabAt(tab, i, e.next);
+                                    }
+                                    break;
+                                }
+                                pred = e;
+                            }
                         }
                     }
+
                 }
-                if (null != currentNode) {
-                    if (!matchValue || (matchValue && value != null && value.equals(currentNode.value))) {
-                        //说明是第一个节点
-                        if (null == lastNode) {
-                            tab[firstLocal] = currentNode.next;
-                        } else {
-                            lastNode.next = currentNode.next;
+                // validated==true 表示已经run过核心的查找逻辑了，所以在内部就可以break
+                if (validated) {
+                    if (oldValue != null) {
+                        if ( value == null) {
+                            //说明是remove操作
+                            addCount(-1L,  -1);
                         }
-                        baseCount--;
-                        return currentNode;
+                        return oldValue;
                     }
+                    break;
                 }
             }
         }
@@ -340,17 +365,17 @@ public class MyConcurrentHashMap<K, V> extends AbstractMap<K, V>
     @Override
     public V get(Object key) {
         Node<K, V>[] tab;
-        Node<K,V> e, p;
+        Node<K, V> e, p;
         int n, eh;
         K ek;
         int hash = spread(key.hashCode());
-        if ((tab=table) != null
-                && (n=tab.length) > 0
-                && (e = tabAt(tab, (n - 1)&hash)) != null) {
+        if ((tab = table) != null
+                && (n = tab.length) > 0
+                && (e = tabAt(tab, (n - 1) & hash)) != null) {
 
             if ((eh = e.hash) == hash) {
                 //查找到的就是当前节点
-                if(((ek = e.key) == key) || (ek != null && key.equals(ek))) {
+                if (((ek = e.key) == key) || (ek != null && key.equals(ek))) {
                     return e.value;
                 }
             } else if (eh < 0) {
@@ -359,7 +384,7 @@ public class MyConcurrentHashMap<K, V> extends AbstractMap<K, V>
                 return (p = e.find(hash, key)) != null ? p.value : null;
             }
 
-            while ( (e = e.next) != null) {
+            while ((e = e.next) != null) {
                 if (e.hash == hash &&
                         ((ek = e.key) == key || (ek != null && key.equals(ek)))) {
 
@@ -372,6 +397,7 @@ public class MyConcurrentHashMap<K, V> extends AbstractMap<K, V>
 
     /**
      * MyConcurrentHashMap中value也不能null，如果为null，这一步返回的结果就是不正确的
+     *
      * @param key
      * @return
      */
@@ -381,8 +407,7 @@ public class MyConcurrentHashMap<K, V> extends AbstractMap<K, V>
 
     @Override
     public V remove(Object key) {
-        Node<K, V> e = removeNode(hash(key), key, null, false);
-        return e == null ? null : e.value;
+        return replaceNode(key, null, null);
     }
 
     /**
@@ -465,22 +490,22 @@ public class MyConcurrentHashMap<K, V> extends AbstractMap<K, V>
         long size = baseCount.addAndGet(x);
         if (check >= 0) {
             int n, sc;
-            Node<K,V>[] tab, nt;
-            while((n = table.length) < DEFAULT_MAX_CAPACITY &&  //没有达到数组的最大长度才允许扩容
-                    (tab=table) != null && //保证初始化之后才进行扩容操作
+            Node<K, V>[] tab, nt;
+            while ((n = table.length) < DEFAULT_MAX_CAPACITY &&  //没有达到数组的最大长度才允许扩容
+                    (tab = table) != null && //保证初始化之后才进行扩容操作
                     size >= (sc = sizeCtl.get())) { //达到扩容阈值
-                if(sc < 0) {
+                if (sc < 0) {
                     //说明已经有线程在进行扩容了
                     if ((nt = newTable) == null || //说明扩容主线程要么还没开始，要么已经结束了，没开始的概率非常小
                             transferIndex.get() <= 0 || //已经扩容完毕了
                             ((-sc - 1) >= MAX_RESIZERS)) {//帮助扩容的线程数已经达到最大值了
                         break;
                     }
-                    if (sizeCtl.compareAndSet(sc, sc-1)){
+                    if (sizeCtl.compareAndSet(sc, sc - 1)) {
                         //帮助扩容
                         transfer(tab, nt);
                     }
-                } else if(sizeCtl.compareAndSet(sc, -1)){
+                } else if (sizeCtl.compareAndSet(sc, -1)) {
                     //说明需要当前线程进行扩容操作
                     transfer(tab, null);
                 }
@@ -491,13 +516,13 @@ public class MyConcurrentHashMap<K, V> extends AbstractMap<K, V>
 
     /**
      * 扩容操作
+     *
      * @param tab
      * @param nextTab 为null时表示需要当前线程创建newTable
      */
-    private void transfer(Node<K,V>[] tab, Node<K,V>[] nextTab) {
-        Node<K,V>[] newTab;
+    private void transfer(Node<K, V>[] tab, Node<K, V>[] nextTab) {
+        Node<K, V>[] newTab;
         int sc;
-
 
 
     }
@@ -584,8 +609,8 @@ public class MyConcurrentHashMap<K, V> extends AbstractMap<K, V>
         /**
          * Virtualized support for map.get(); overridden in subclasses.
          */
-        Node<K,V> find(int h, Object k) {
-            Node<K,V> e = this;
+        Node<K, V> find(int h, Object k) {
+            Node<K, V> e = this;
             if (k != null) {
                 do {
                     K ek;
