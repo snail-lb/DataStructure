@@ -178,50 +178,43 @@ public class MyConcurrentHashMap<K, V> extends AbstractMap<K, V>
         return (Node<K, V>) U.getObjectVolatile(tab, byteOffset(i));
     }
 
+    /**
+     * CAS方式设置数组中的某个值
+     * @param tab
+     * @param i
+     * @param expect
+     * @param update
+     * @param <K>
+     * @param <V>
+     * @return
+     */
     static final <K, V> boolean casTabAt(Node<K, V>[] tab, int i, Node<K, V> expect, Node<K, V> update) {
         return U.compareAndSwapObject(tab, byteOffset(i), expect, update);
     }
 
+    /**
+     * 修改数组中的某个值
+     * @param tab
+     * @param i
+     * @param update
+     * @param <K>
+     * @param <V>
+     */
     static final <K, V> void setTabAt(Node<K, V>[] tab, int i, Node<K, V> update) {
         U.putObjectVolatile(tab, byteOffset(i), update);
     }
 
+    /**
+     * 计算偏移量
+     * @param i
+     * @return
+     */
     static final long byteOffset(int i) {
         return ((long) i << ASHIFT) + ABASE;
     }
 
-    Node<K, V> newNode(int hash, K key, V value, Node<K, V> next) {
-        return new Node(hash, key, value, next);
-    }
-
-    /**
-     * 获取节点
-     * key的数组位置为： hash(key) & (table.length - 1)
-     * 每次扩容后都需要重新设置key的位置
-     *
-     * @param hash
-     * @param key
-     * @return
-     */
-    final Node<K, V> getNode(int hash, Object key) {
-        Node<K, V>[] tab = table;
-        if (null != tab && tab.length > 0) {
-            Node<K, V> first = tab[hash & (tab.length - 1)];
-            if (first != null) {
-                if (hash == first.hash && (first.key == key || (key != null && key.equals(first.key)))) {
-                    return first;
-                } else if (null != first.next) {
-                    Node<K, V> node = first;
-                    while (null != node.next) {
-                        node = node.next;
-                        if (hash == node.hash && (node.key == key || (key != null && key.equals(node.key)))) {
-                            return node;
-                        }
-                    }
-                }
-            }
-        }
-        return null;
+    private Node<K, V> newNode(int hash, K key, V value, Node<K, V> next) {
+        return new Node<>(hash, key, value, next);
     }
 
     /**
@@ -339,15 +332,51 @@ public class MyConcurrentHashMap<K, V> extends AbstractMap<K, V>
     @Override
     public void putAll(Map<? extends K, ? extends V> m) {
         tryPresize(m.size());
-        for (Map.Entry<? extends K, ? extends V> e : m.entrySet()) {
+        for (Entry<? extends K, ? extends V> e : m.entrySet()) {
             put(e.getKey(), e.getValue());
         }
     }
 
     @Override
     public V get(Object key) {
-        Node<K, V> e = getNode(hash(key), key);
-        return e == null ? null : e.value;
+        Node<K, V>[] tab;
+        Node<K,V> e, p;
+        int n, eh;
+        K ek;
+        int hash = spread(key.hashCode());
+        if ((tab=table) != null
+                && (n=tab.length) > 0
+                && (e = tabAt(tab, (n - 1)&hash)) != null) {
+
+            if ((eh = e.hash) == hash) {
+                //查找到的就是当前节点
+                if(((ek = e.key) == key) || (ek != null && key.equals(ek))) {
+                    return e.value;
+                }
+            } else if (eh < 0) {
+                // 说明该节点已经是扩容迁移后的ForwardingNode节点了
+                //这里就是扩容时get也不需要加锁的关键
+                return (p = e.find(hash, key)) != null ? p.value : null;
+            }
+
+            while ( (e = e.next) != null) {
+                if (e.hash == hash &&
+                        ((ek = e.key) == key || (ek != null && key.equals(ek)))) {
+
+                    return e.value;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * MyConcurrentHashMap中value也不能null，如果为null，这一步返回的结果就是不正确的
+     * @param key
+     * @return
+     */
+    public boolean containsKey(Object key) {
+        return get(key) != null;
     }
 
     @Override
@@ -387,7 +416,7 @@ public class MyConcurrentHashMap<K, V> extends AbstractMap<K, V>
                 tab = initTable();
             } else if ((first = tabAt(tab, i = (n - 1) & hash)) == null) {
                 // 如果头结点为空，那么就直接设置值，不需要加锁
-                if (casTabAt(tab, i, null, new Node<K, V>(hash, key, value, null))) {
+                if (casTabAt(tab, i, null, newNode(hash, key, value, null))) {
                     break;
                 }
             } else if (sizeCtl.get() == MOVED) {
@@ -409,7 +438,7 @@ public class MyConcurrentHashMap<K, V> extends AbstractMap<K, V>
                             break;
                         }
                         if ((currentNode = currentNode.next) == null) {
-                            currentNode.next = new Node<>(hash, key, value, null);
+                            currentNode.next = newNode(hash, key, value, null);
                             break;
                         }
                     }
@@ -466,6 +495,11 @@ public class MyConcurrentHashMap<K, V> extends AbstractMap<K, V>
      * @param nextTab 为null时表示需要当前线程创建newTable
      */
     private void transfer(Node<K,V>[] tab, Node<K,V>[] nextTab) {
+        Node<K,V>[] newTab;
+        int sc;
+
+
+
     }
 
     private Node<K, V>[] helpTransfer(Node<K, V>[] tab, Node<K, V> first) {
@@ -545,6 +579,22 @@ public class MyConcurrentHashMap<K, V> extends AbstractMap<K, V>
         public V setValue(V value) {
             this.value = value;
             return value;
+        }
+
+        /**
+         * Virtualized support for map.get(); overridden in subclasses.
+         */
+        Node<K,V> find(int h, Object k) {
+            Node<K,V> e = this;
+            if (k != null) {
+                do {
+                    K ek;
+                    if (e.hash == h &&
+                            ((ek = e.key) == k || (ek != null && k.equals(ek))))
+                        return e;
+                } while ((e = e.next) != null);
+            }
+            return null;
         }
     }
 
