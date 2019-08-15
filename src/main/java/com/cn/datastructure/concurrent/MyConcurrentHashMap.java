@@ -486,6 +486,7 @@ public class MyConcurrentHashMap<K, V> extends AbstractMap<K, V>
      */
     private void transfer(Node<K, V>[] tab, Node<K, V>[] nextTab) {
         int n = tab.length, stride;
+        //计算需要迁移多少个hash桶，MIN_TRANSFER_STRIDE该值作为下限，避免扩容线程过多
         if ((stride = (NCPU > 1) ? (n >>> 3) / NCPU : n) < MIN_TRANSFER_STRIDE) {
             stride = MIN_TRANSFER_STRIDE; // 保证最少在16个槽以上
         }
@@ -506,8 +507,10 @@ public class MyConcurrentHashMap<K, V> extends AbstractMap<K, V>
 
         int nextn = nextTab.length;
         ForwardingNode<K, V> fwd = new ForwardingNode<>(nextTab);
-        boolean advance = true;
+        boolean advance = true; //CAS循环获取扩容位置的标志
         boolean finishing = false;
+        //1 逆序迁移已经获取到的hash桶集合，如果迁移完毕，则更新transferIndex，获取下一批待迁移的hash桶
+        //2 如果transferIndex=0，表示所以hash桶均被分配，将i置为-1，准备退出transfer方法
         for (int i = 0, bound = 0; ; ) {
             Node<K, V> first;int fh;
 
@@ -517,6 +520,7 @@ public class MyConcurrentHashMap<K, V> extends AbstractMap<K, V>
                 if (--i >= bound || finishing) {
                     advance = false;
                 } else if ((nextIndex = transferIndex.get()) <= 0) {
+                    //transferIndex<=0表示已经没有需要迁移的hash桶，将i置为-1，线程准备退出
                     i = -1;
                     advance = false;
                 } else if (transferIndex.compareAndSet(nextIndex,
@@ -530,6 +534,7 @@ public class MyConcurrentHashMap<K, V> extends AbstractMap<K, V>
             if (i < 0 || i >= n || i + n >= nextn) {
                 int sc;
                 if (finishing) {
+                    //最后一个迁移的线程，进行一些收尾工作
                     newTable = null;
                     table = nextTab;
                     sizeCtl.set((n << 1) - (n >>> 1));
@@ -548,11 +553,23 @@ public class MyConcurrentHashMap<K, V> extends AbstractMap<K, V>
                 advance = true;
             } else {
                 synchronized (first){
-                    //TODO
+                    //开始对first槽点的链表数据进行迁移
+                    if(tabAt(tab, i) == first) {
+                        //新数组长度
+                        int l = n << 1;
+                        for(Node<K,V> current = first; current.next != null; current=current.next) {
+                            // 找到当前节点迁移到新节点上的槽点位置
+                            int location = (l - 1) & current.hash;
+                            //这里不能直接移动当前节点，因为这些节点在迁移完成之前还需要对外提供服务
+                            Node<K,V> newNode = new Node<>(current.hash, current.key, current.value, tabAt(newTable, location));
+                            setTabAt(nextTab, location, newNode);
+                        }
+                        setTabAt(tab, i, fwd);
+                        advance = true;
+                    }
                 }
             }
         }
-
     }
 
     private int resizeStamp(int n) {
