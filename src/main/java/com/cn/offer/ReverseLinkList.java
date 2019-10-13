@@ -16,7 +16,8 @@ public class ReverseLinkList {
         head.next.next.next = new ListNode(4);
         head.next.next.next.next = new ListNode(5);
 
-        ListNode resultNode = reverseList(head);
+//        ListNode resultNode = reverseList(head);
+        ListNode resultNode = reverseListRecursive(head);
         while (resultNode != null) {
             System.out.println(resultNode.val);
             resultNode = resultNode.next;
@@ -42,6 +43,30 @@ public class ReverseLinkList {
             currentNode = currentNextNode;
         }
         return currentLastNode;
+    }
+
+    /**
+     * 反转链表  递归实现
+     * @param head
+     * @return
+     */
+    public static ListNode reverseListRecursive(ListNode head) {
+        if (null == head || null == head.next ){
+            return null;
+        }
+        ListNode next = head.next;
+        head.next = null;
+        return reverseListRecursive(head, next);
+    }
+
+    private static ListNode reverseListRecursive(ListNode current, ListNode next) {
+        if(next == null){
+            return current;
+        }
+
+        ListNode newNext = next.next;
+        next.next = current;
+        return reverseListRecursive(next, newNext);
     }
 
     static class ListNode {

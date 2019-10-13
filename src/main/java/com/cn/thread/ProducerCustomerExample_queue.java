@@ -26,11 +26,9 @@ public class ProducerCustomerExample_queue {
         @Override
         public void run() {
             while (true){
-                Boolean result = queue.offer(new Goods());
-                if(result) {
-                    System.out.println("生产了一个商品,剩余总商品数:" + queue.size());
-                }
                 try {
+                    queue.put(new Goods());
+                    System.out.println("生产了一个商品,剩余总商品数:" + queue.size());
                     TimeUnit.MILLISECONDS.sleep((long) (Math.random()*1000));
                 } catch (InterruptedException e) {
                     e.printStackTrace();
