@@ -624,8 +624,8 @@ public class MyConcurrentHashMap<K, V> extends AbstractMap<K, V>
     static class Node<K, V> implements Entry<K, V> {
         final int hash;
         final K key;
-        V value;
-        Node<K, V> next;
+        volatile V value;
+        volatile Node<K, V> next;
 
         public Node(int hash, K key, V value, Node<K, V> next) {
             this.hash = hash;
