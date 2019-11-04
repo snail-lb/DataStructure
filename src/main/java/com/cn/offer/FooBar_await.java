@@ -33,6 +33,7 @@ public class FooBar_await {
                 // printFoo.run() outputs "foo". Do not change or remove this line.
                 printFoo.run();
                 isOutFoo = false;
+                condition.signalAll();
             } finally {
                 lock.unlock();
             }
@@ -49,6 +50,7 @@ public class FooBar_await {
                 // printFoo.run() outputs "foo". Do not change or remove this line.
                 printBar.run();
                 isOutFoo = true;
+                condition.signalAll();
             } finally {
                 lock.unlock();
             }

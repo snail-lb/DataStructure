@@ -4,7 +4,7 @@ import org.junit.Test;
 
 import static org.junit.Assert.*;
 
-public class FooBar_awaitTest {
+public class FooBar_volatileTest {
 
     private static void bar() {
         System.out.println("bar");
@@ -16,17 +16,17 @@ public class FooBar_awaitTest {
 
     @Test
     public void test() {
-        final FooBar_await fooBar = new FooBar_await(10);
+        final FooBar_volatile fooBar = new FooBar_volatile(10);
         new Thread(() -> {
             try {
-                fooBar.foo(FooBar_awaitTest::foo);
+                fooBar.foo(FooBar_volatileTest::foo);
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
         }).start();
         new Thread(() -> {
             try {
-                fooBar.bar(FooBar_awaitTest::bar);
+                fooBar.bar(FooBar_volatileTest::bar);
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
