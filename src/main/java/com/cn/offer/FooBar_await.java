@@ -1,5 +1,9 @@
 package com.cn.offer;
 
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
+
 /**
  * @autor: lvbiao
  * @version: 1.0
@@ -9,41 +13,44 @@ package com.cn.offer;
  * https://leetcode-cn.com/problems/print-foobar-alternately/
  * @date: 2019-11-04 09:58
  */
-public class FooBar {
+public class FooBar_await {
     private int n;
-    private Object lock = new Object();
+    private Lock lock = new ReentrantLock();
+    private Condition condition = lock.newCondition();
     private volatile boolean isOutFoo = true;
 
-    public FooBar(int n) {
+    public FooBar_await(int n) {
         this.n = n;
     }
 
     public void foo(Runnable printFoo) throws InterruptedException {
         for (int i = 0; i < n; i++) {
-            synchronized (lock) {
+            lock.lock();
+            try {
                 while (!isOutFoo) {
-                    lock.wait();
+                    condition.await();
                 }
                 // printFoo.run() outputs "foo". Do not change or remove this line.
                 printFoo.run();
                 isOutFoo = false;
-
-                lock.notifyAll();
+            } finally {
+                lock.unlock();
             }
         }
     }
 
     public void bar(Runnable printBar) throws InterruptedException {
         for (int i = 0; i < n; i++) {
-            synchronized (lock) {
+            lock.lock();
+            try {
                 while (isOutFoo) {
-                    lock.wait();
+                    condition.await();
                 }
-                // printBar.run() outputs "bar". Do not change or remove this line.
+                // printFoo.run() outputs "foo". Do not change or remove this line.
                 printBar.run();
                 isOutFoo = true;
-
-                lock.notifyAll();
+            } finally {
+                lock.unlock();
             }
         }
     }

@@ -2,9 +2,7 @@ package com.cn.offer;
 
 import org.junit.Test;
 
-import static org.junit.Assert.*;
-
-public class FooBarTest {
+public class FooBar_waitTest {
 
     private static void bar() {
         System.out.println("bar");
@@ -16,22 +14,20 @@ public class FooBarTest {
 
     @Test
     public void test() {
-        final FooBar fooBar = new FooBar(10);
+        final FooBar_wait fooBar = new FooBar_wait(10);
         new Thread(() -> {
             try {
-                fooBar.foo(FooBarTest::foo);
+                fooBar.foo(FooBar_waitTest::foo);
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
         }).start();
         new Thread(() -> {
             try {
-                fooBar.bar(FooBarTest::bar);
+                fooBar.bar(FooBar_waitTest::bar);
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
         }).start();
-
-
     }
 }
