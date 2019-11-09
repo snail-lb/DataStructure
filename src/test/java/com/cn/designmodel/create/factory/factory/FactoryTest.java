@@ -1,4 +1,4 @@
-package com.cn.designmodel.factory.factory;
+package com.cn.designmodel.create.factory.factory;
 
 import org.junit.Test;
 

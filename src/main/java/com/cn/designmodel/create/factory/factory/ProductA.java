@@ -1,4 +1,4 @@
-package com.cn.designmodel.factory.simple;
+package com.cn.designmodel.create.factory.factory;
 
 /**
  * @author: lvbiao
