@@ -7,6 +7,6 @@ package com.cn.designmodel.behavioral.observer;
 public class ConcreteObserver implements Observer {
     @Override
     public void update(Object message) {
-        System.out.println("得到关系的时间");
+        System.out.println("收到关心的消息：" + String.valueOf(message));
     }
 }
