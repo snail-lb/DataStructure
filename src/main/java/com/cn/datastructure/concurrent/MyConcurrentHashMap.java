@@ -23,6 +23,10 @@ import java.util.concurrent.atomic.AtomicLong;
  * ConcurrentHashMap的负载因子只在初始化计算数组长度是起作用，之后就不会使用该负载因子了，之后的计算方式是： table.size*2 - table.size/2
  * ConcurrentHashMap在链表长度超过8时会转化为红黑树，在本例中暂时不做此优化。
  *
+ * ConcurrentHashMap优化思考：
+ * 1. ConcurrentHashMap中使用了红黑树，当特别极端的情况下，hash冲突非常严重，这个时候是否可以考虑将红黑树再进行优化，比如使用B+树
+ * 2. 写加锁，写时是对链表头结点加锁，当hash冲突比较严重的时候，竞争会非常激烈，是不是可以考虑锁住更少的节点
+ * 3. 扩容时，如果只有一个线程正在写后扩容，没有其他线程进行相应的帮助，是不是可以考虑创建相应的扩容线程来帮助扩容
  * @param <K>
  * @param <V>
  */
