@@ -43,29 +43,5 @@ public class LongestSubstringWithoutRepeatingCharacters {
             }
         }
         return ans;
-
-
-
-
-
-/*
-        Integer[] indexArray = new Integer[26];
-        int length = 0;
-        int partLength = 0;
-        for (int i = 0; i < s.length(); i++) {
-            char c = s.charAt(i);
-            int index = (c - 'a');
-            Integer sIndex = indexArray[index];
-            if (sIndex == null) {
-                partLength++;
-                length = Math.max(length, partLength);
-            } else {
-                int currentLength = i - sIndex;
-                length = Math.max(length, currentLength);
-                partLength = 0;
-            }
-            indexArray[index] = i;
-        }
-        return length;*/
     }
 }
