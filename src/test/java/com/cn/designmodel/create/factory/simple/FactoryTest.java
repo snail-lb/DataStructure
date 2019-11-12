@@ -1,8 +1,6 @@
-package com.cn.designmodel.factory.simple;
+package com.cn.designmodel.create.factory.simple;
 
 import org.junit.Test;
-
-import static org.junit.Assert.*;
 
 public class FactoryTest {
 
