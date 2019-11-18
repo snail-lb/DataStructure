@@ -50,7 +50,7 @@ public class BitOperation {
         System.out.println(n << 1);
 
         // 11. 整数n除以2是多少？(负奇数的运算不可用)
-        System.out.println( n >> 1);
+        System.out.println(n >> 1);
 
         // 12. 乘以2的n次方，例如计算10 * 8(8是2的3次方)
         System.out.println(10 << 3);
@@ -59,7 +59,7 @@ public class BitOperation {
         System.out.println(16 >> 3);
 
         // 14. 取两个数的最大值（某些机器上，效率比a>b ? a:b高）
-        int a=123,b=456;
+        int a = 123, b = 456;
         System.out.println(b & ((a - b) >> 31) | a & (~(a - b) >> 31));
 
         // 15. 取两个数的最小值（某些机器上，效率比a>b ? b:a高）
@@ -180,6 +180,17 @@ public class BitOperation {
             }
         } while (++index <= 31);
         return true;
+    }
+
+    /**
+     * 位运算替代求余： 计算 x % y 的值， y始终是2的n次方
+     *
+     * @param x
+     * @param y 2^n (n>=0)
+     * @return
+     */
+    public static int mod(int x, int y) {
+        return x & (y - 1);
     }
 
 }

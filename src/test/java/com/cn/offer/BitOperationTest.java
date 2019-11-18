@@ -3,8 +3,6 @@ package com.cn.offer;
 import org.junit.Assert;
 import org.junit.Test;
 
-import static org.junit.Assert.*;
-
 public class BitOperationTest {
 
     @Test
@@ -62,5 +60,14 @@ public class BitOperationTest {
         Assert.assertEquals(BitOperation.isPowerOfFour(16), true);
         Assert.assertEquals(BitOperation.isPowerOfFour(256), true);
         Assert.assertEquals(BitOperation.isPowerOfFour(255), false);
+    }
+
+
+    @Test
+    public void mod() {
+        Assert.assertEquals(1, BitOperation.mod(5, 4));
+        Assert.assertEquals(0, BitOperation.mod(4, 4));
+        Assert.assertEquals(3, BitOperation.mod(3, 4));
+        Assert.assertEquals(0, BitOperation.mod(0, 4));
     }
 }
